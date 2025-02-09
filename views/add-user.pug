@@ -1,0 +1,24 @@
+doctype html
+html
+    head
+        title Add User
+        link(rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap")
+    body
+        h1 Add a New User
+        form(action="/add-user" method="POST")
+            label(for="id") User ID:
+            input(type="number" id="id" name="id" required)
+
+            label(for="first_name") First Name:
+            input(type="text" id="first_name" name="first_name" required)
+
+            label(for="last_name") Last Name:
+            input(type="text" id="last_name" name="last_name" required)
+
+            label(for="birthday") Birthday:
+            input(type="date" id="birthday" name="birthday")
+
+            label(for="marital_status") Marital Status:
+            input(type="text" id="marital_status" name="marital_status")
+
+            button(type="submit") Add User
