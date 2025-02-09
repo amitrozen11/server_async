@@ -3,13 +3,15 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const mongoose = require('mongoose');
 
-// MongoDB Setup
-mongoose.connect('mongodb+srv://amitandyuval:AmitYuval012024@cluster0.w1yh4.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
+mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
 }).then(() => {
-    // Successful connection to MongoDB
+    console.log('Connected to MongoDB');
 }).catch((err) => {
     console.error('Error connecting to MongoDB:', err.message);
 });
+
 
 // Import Models
 const Costs = require('./models/costs');
