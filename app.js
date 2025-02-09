@@ -102,14 +102,14 @@ app.get('/api/report', async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Get all distinct categories from the database (dynamic support for new categories)
-        const distinctCategories = await Costs.distinct('category', { userId: userId });
-
-        // Initialize categories as empty arrays
-        const defaultCategories = distinctCategories.reduce((acc, category) => {
-            acc[category] = [];
-            return acc;
-        }, {});
+        // Default categories (even if no data exists)
+        const defaultCategories = {
+            food: [],
+            education: [],
+            health: [],
+            housing: [],
+            sport: []
+        };
 
         // Aggregate costs by category within the date range
         const costs = await Costs.aggregate([
@@ -130,15 +130,21 @@ app.get('/api/report', async (req, res) => {
         ]);
 
         // Group costs by category
-        costs.forEach(cost => {
-            if (!defaultCategories[cost.category]) {
-                defaultCategories[cost.category] = [];
+        const groupedCosts = costs.reduce((acc, cost) => {
+            if (!acc[cost.category]) {
+                acc[cost.category] = [];
             }
-            defaultCategories[cost.category].push({
+            acc[cost.category].push({
                 sum: cost.sum,
                 description: cost.description,
                 day: cost.day
             });
+            return acc;
+        }, {});
+
+        // Merge grouped costs into default categories
+        Object.keys(defaultCategories).forEach(category => {
+            defaultCategories[category] = groupedCosts[category] || [];
         });
 
         // Format the costs array for the response
@@ -158,7 +164,6 @@ app.get('/api/report', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch report', details: err.message });
     }
 });
-
 
 // Route to fetch user details by user ID
 app.get('/api/users/:id', async (req, res) => {
