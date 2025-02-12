@@ -4,9 +4,9 @@ const mongoose = require('mongoose');
 const costSchema = new mongoose.Schema({
     description: { type: String, required: true },
     category: { type: String, required: true },
-    userId: { type: Number, required: true }, // חיבור למשתמש באמצעות id
+    userId: { type: Number, required: true },
     sum: { type: Number, required: true },
-    date: { type: Date, default: Date.now } // שדה תאריך עם ברירת מחדל
+    date: { type: Date, default: Date.now }
 });
 
 const Cost = mongoose.model('Cost', costSchema);
