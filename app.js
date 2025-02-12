@@ -29,11 +29,6 @@ app.use(express.static(path.join(__dirname, 'public'))); // Serve static files
 app.use(bodyParser.urlencoded({ extended: true })); // Parse form data
 app.use(express.json()); // Parse JSON data
 
-// Route to render the form for adding a cost
-app.get('/api/add', (req, res) => {
-    res.render('add-costs');
-});
-
 // Route to add a cost to the database
 app.post('/api/add', async (req, res) => {
     try {
