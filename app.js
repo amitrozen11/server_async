@@ -1,7 +1,3 @@
-/**
- * Express server for cost management system using MongoDB.
- * Implements the Computed Pattern to cache monthly reports.
- */
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
@@ -9,9 +5,6 @@ const mongoose = require('mongoose');
 
 require('dotenv').config();
 
-/**
- * Connect to MongoDB database.
- */
 mongoose.connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
@@ -21,6 +14,7 @@ mongoose.connect(process.env.MONGO_URI, {
     console.error('Error connecting to MongoDB:', err.message);
 });
 
+
 // Import Models
 const Costs = require('./models/costs');
 const User = require('./models/user');
@@ -28,125 +22,181 @@ const User = require('./models/user');
 const app = express();
 
 // Express Setup
-app.set('view engine', 'pug');
-app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'pug'); // Use Pug as the view engine
+app.set('views', path.join(__dirname, 'views')); // Define the directory for views
 
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public'))); // Serve static files
+app.use(bodyParser.urlencoded({ extended: true })); // Parse form data
+app.use(express.json()); // Parse JSON data
 
-/**
- * Updates the computed monthly report for a given user.
- *
- * @param {number} userId - The ID of the user.
- * @param {number} year - The year of the report.
- * @param {number} month - The month of the report.
- */
-async function updateMonthlyReport(userId, year, month) {
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+// Route to render the form for adding a cost
+app.get('/api/add', (req, res) => {
+    res.render('add-costs');
+});
 
-    const costs = await Costs.aggregate([
-        { $match: { userId: userId, date: { $gte: startDate, $lte: endDate } } },
-        { $project: { category: 1, sum: 1, description: 1, day: { $dayOfMonth: '$date' } } }
-    ]);
-
-    const defaultCategories = { food: [], education: [], health: [], housing: [], sport: [] };
-    const groupedCosts = costs.reduce((acc, cost) => {
-        if (!acc[cost.category]) acc[cost.category] = [];
-        acc[cost.category].push({ sum: cost.sum, description: cost.description, day: cost.day });
-        return acc;
-    }, {});
-
-    Object.keys(defaultCategories).forEach(category => {
-        defaultCategories[category] = groupedCosts[category] || [];
-    });
-
-    const formattedCosts = Object.keys(defaultCategories).map(category => ({ [category]: defaultCategories[category] }));
-
-    await User.updateOne(
-        { id: userId },
-        { $set: { [`monthlyReport.${year}.${month}`]: formattedCosts } }
-    );
-}
-
-/**
- * API endpoint to add a cost entry.
- *
- * @route POST /api/add
- * @param {number} req.body.userId - The user ID.
- * @param {string} req.body.description - The description of the cost.
- * @param {string} req.body.category - The category of the cost.
- * @param {number} req.body.sum - The amount spent.
- * @param {string} [req.body.date] - The date of the expense.
- * @returns {Object} 201 - The saved cost object.
- * @returns {Object} 400 - Error message for invalid user ID.
- * @returns {Object} 404 - Error message if user not found.
- */
+// Route to add a cost to the database
 app.post('/api/add', async (req, res) => {
     try {
         const { userId, description, category, sum } = req.body;
+
+        // Convert the user ID to a number and validate it
         const numericUserId = parseInt(userId);
         if (isNaN(numericUserId)) {
-            return res.status(400).json({ error: 'Invalid user ID. Please provide a valid numeric user ID.' });
+            return res.status(400).json({
+                error: 'Invalid user ID. Please provide a valid numeric user ID.'
+            });
         }
 
+        // Check if the user exists in the database
         const userExists = await User.findOne({ id: numericUserId });
         if (!userExists) {
-            return res.status(404).json({ error: 'User not found', message: `No user found with ID ${numericUserId}` });
+            return res.status(404).json({
+                error: 'User not found',
+                message: `No user found with ID ${numericUserId}`
+            });
         }
 
-        const date = req.body.date ? new Date(req.body.date) : new Date();
-        const newCost = new Costs({ userId: numericUserId, description, category, sum, date });
+        // Create a new cost document
+        const newCost = new Costs({
+            userId: numericUserId,
+            description,
+            category,
+            sum,
+            date: req.body.date || Date.now()
+        });
+
+        // Save the cost to the database
         const savedCost = await newCost.save();
 
-        await updateMonthlyReport(numericUserId, date.getFullYear(), date.getMonth() + 1);
-
+        // Return the saved cost as a JSON response
         res.status(201).json(savedCost);
     } catch (err) {
         console.error('Error adding cost:', err.message);
-        res.status(500).json({ error: 'Failed to add cost', details: err.message });
+        res.status(500).json({
+            error: 'Failed to add cost',
+            details: err.message
+        });
     }
 });
 
-/**
- * API endpoint to fetch a monthly report of costs.
- *
- * @route GET /api/report
- * @param {number} req.query.id - The user ID.
- * @param {number} req.query.year - The year for the report.
- * @param {number} req.query.month - The month for the report.
- * @returns {Object} 200 - Monthly report containing categorized costs.
- * @returns {Object} 400 - Error message for invalid parameters.
- * @returns {Object} 404 - Error message if user not found.
- */
+// Route to fetch a monthly report of costs
 app.get('/api/report', async (req, res) => {
-    try {
-        const { id, year, month } = req.query;
-        const userId = parseInt(id);
-        if (isNaN(userId) || !year || !month) {
-            return res.status(400).json({ error: 'Invalid parameters: user ID, year, or month' });
-        }
+    const { id, year, month } = req.query;
 
+    const userId = parseInt(id);
+    if (isNaN(userId)) {
+        return res.status(400).json({ error: 'Invalid user ID. Please provide a valid numeric user ID.' });
+    }
+    if (!year || !month) {
+        return res.status(400).json({ error: 'Missing required parameters: year or month' });
+    }
+
+    try {
+        // Define the date range for the report
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+        // Fetch the user information
         const user = await User.findOne({ id: userId });
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const report = user.monthlyReport?.[year]?.[month] || [];
-        res.status(200).json({ userid: userId, year: parseInt(year), month: parseInt(month), costs: report });
+        // Default categories (even if no data exists)
+        const defaultCategories = {
+            food: [],
+            education: [],
+            health: [],
+            housing: [],
+            sport: []
+        };
+
+        // Aggregate costs by category within the date range
+        const costs = await Costs.aggregate([
+            {
+                $match: {
+                    userId: userId,
+                    date: { $gte: startDate, $lte: endDate }
+                }
+            },
+            {
+                $project: {
+                    category: 1,
+                    sum: 1,
+                    description: 1,
+                    day: { $dayOfMonth: '$date' }
+                }
+            }
+        ]);
+
+        // Group costs by category
+        const groupedCosts = costs.reduce((acc, cost) => {
+            if (!acc[cost.category]) {
+                acc[cost.category] = [];
+            }
+            acc[cost.category].push({
+                sum: cost.sum,
+                description: cost.description,
+                day: cost.day
+            });
+            return acc;
+        }, {});
+
+        // Merge grouped costs into default categories
+        Object.keys(defaultCategories).forEach(category => {
+            defaultCategories[category] = groupedCosts[category] || [];
+        });
+
+        // Format the costs array for the response
+        const formattedCosts = Object.keys(defaultCategories).map(category => ({
+            [category]: defaultCategories[category]
+        }));
+
+        // Return the report
+        res.status(200).json({
+            userid: userId,
+            year: parseInt(year),
+            month: parseInt(month),
+            costs: formattedCosts
+        });
     } catch (err) {
         console.error('Error fetching report:', err);
         res.status(500).json({ error: 'Failed to fetch report', details: err.message });
     }
 });
 
-/**
- * API endpoint to return the developers' details.
- *
- * @route GET /api/about
- * @returns {Object[]} 200 - List of developers with first and last names.
- */
+// Route to fetch user details by user ID
+app.get('/api/users/:id', async (req, res) => {
+    try {
+        const userId = parseInt(req.params.id);
+        const user = await User.findOne({ id: userId });
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Calculate the total costs for the user
+        const totalCosts = await Costs.aggregate([
+            { $match: { userId: userId } },
+            { $group: { _id: '$userId', total: { $sum: '$sum' } } }
+        ]);
+
+        // Get the total sum or set to 0 if no costs
+        let total = totalCosts.length > 0 ? totalCosts[0].total : 0;
+
+        // Return user details and total costs
+        res.status(200).json({
+            first_name: user.first_name,
+            last_name: user.last_name,
+            id: user.id,
+            total: total
+        });
+    } catch (err) {
+        console.error('Error fetching user:', err.message);
+        res.status(500).json({ error: 'Failed to fetch user details', details: err.message });
+    }
+});
+
+// Route to return the developers' details
 app.get('/api/about', (req, res) => {
     const developers = [
         { first_name: 'Amit', last_name: 'Rozen' },
@@ -155,12 +205,7 @@ app.get('/api/about', (req, res) => {
     res.status(200).json(developers);
 });
 
-/**
- * Starts the Express server.
- *
- * @constant {number} PORT - The port number the server listens on.
- */
+// Start the server
 const PORT = 3000;
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
 });
